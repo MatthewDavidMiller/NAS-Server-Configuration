@@ -21,21 +21,24 @@ gateway_address='10.1.10.1'
 dns_address='1.1.1.1'
 user='mary'
 network_prefix='10.0.0.0/8'
+ipv6_link_local_address='fe80::4'
 
 # Call functions
 lock_root
 get_username
 get_interface_name
-configure_network "${ip_address}" "${network_address}" "${subnet_mask}" "${gateway_address}" "${dns_address}" "${interface}"
+configure_network "${ip_address}" "${network_address}" "${subnet_mask}" "${gateway_address}" "${dns_address}" "${interface}" "${ipv6_link_local_address}"
 fix_apt_packages
 install_nas_packages
 configure_ssh
 generate_ssh_key "${user_name}" "y" "n" "n" "${key_name}"
-iptables_setup_base "${interface}" "${network_prefix}"
-iptables_allow_ssh "${network_prefix}" "${ip_address}"
-iptables_allow_https "${network_prefix}" "${ip_address}"
-iptables_allow_smb "${network_prefix}" "${ip_address}"
-iptables_allow_netbios "${network_prefix}" "${ip_address}"
+iptables_setup_base
+iptables_allow_ssh "${network_prefix}" "${interface}"
+iptables_allow_https "${network_prefix}" "${interface}"
+iptables_allow_smb "${network_prefix}" "${interface}"
+iptables_allow_netbios "${network_prefix}" "${interface}"
+iptables_allow_icmp "${network_prefix}" "${interface}"
+iptables_allow_loopback
 iptables_set_defaults
 configure_nas_scripts
 apt_configure_auto_updates "${release_name}"

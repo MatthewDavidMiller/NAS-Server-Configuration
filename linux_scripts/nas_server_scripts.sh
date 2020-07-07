@@ -26,20 +26,24 @@ function configure_network() {
     local gateway_address=${4}
     local dns_address=${5}
     local interface=${6}
+    local ipv6_link_local_address=${7}
 
     # Configure network
-    rm -f '/etc/network/interfaces'
-    cat <<EOF >'/etc/network/interfaces'
-auto lo
-iface lo inet loopback
-
+    grep -q ".*auto ${interface}" '/etc/network/interfaces' && sed -i "s,.*auto ${interface}.*,auto ${interface}," '/etc/network/interfaces' || printf '%s\n' "auto ${interface}" >>'/etc/network/interfaces'
+    grep -q ".*iface ${interface} inet " '/etc/network/interfaces' && sed -i "s,.*iface ${interface} inet .*\naddress\nnetwork\nnetmask\ngateway\ndns-nameservers,iface ${interface} inet static\naddress ${ip_address}\nnetwork ${network_address}\nnetmask ${subnet_mask}\ngateway ${gateway_address}\ndns-nameservers ${dns_address}," '/etc/network/interfaces' || cat <<EOF >>'/etc/network/interfaces'
 iface ${interface} inet static
     address ${ip_address}
     network ${network_address}
     netmask ${subnet_mask}
     gateway ${gateway_address}
     dns-nameservers ${dns_address}
+EOF
 
+    grep -q ".*iface ${interface} inet6" '/etc/network/interfaces' && sed -i "s,.*iface ${interface} inet6.*\naddress\nnetmask 64\nscope link,iface ${interface} inet6 static\naddress ${ipv6_link_local_address}\nnetmask 64\nscope link," '/etc/network/interfaces' || cat <<EOF >>'/etc/network/interfaces'
+iface ${interface} inet6 static
+    address ${ipv6_link_local_address}
+    netmask 64
+    scope link
 EOF
 
     # Restart network interface
@@ -70,7 +74,7 @@ function configure_ssh() {
     grep -q ".*PermitRootLogin" '/etc/ssh/sshd_config' && sed -i "s,.*PermitRootLogin.*,PermitRootLogin no," '/etc/ssh/sshd_config' || printf '%s\n' 'PermitRootLogin no' >>'/etc/ssh/sshd_config'
 
     # Enable public key authentication
-    grep -q ".*AuthorizedKeysFile" '/etc/ssh/sshd_config' && sed -i "s,.*AuthorizedKeysFile\s*.ssh/authorized_keys\s*.ssh/authorized_keys2,AuthorizedKeysFile .ssh/authorized_keys," '/etc/ssh/sshd_config' || printf '%s\n' 'AuthorizedKeysFile .ssh/authorized_keys' >>'/etc/ssh/sshd_config'
+    grep -q ".*AuthorizedKeysFile" '/etc/ssh/sshd_config' && sed -i "s,.*AuthorizedKeysFile\s*.ssh\/authorized_keys\s*.ssh\/authorized_keys2,AuthorizedKeysFile .ssh\/authorized_keys," '/etc/ssh/sshd_config' || printf '%s\n' 'AuthorizedKeysFile .ssh/authorized_keys' >>'/etc/ssh/sshd_config'
     grep -q ".*PubkeyAuthentication" '/etc/ssh/sshd_config' && sed -i "s,.*PubkeyAuthentication.*,PubkeyAuthentication yes," '/etc/ssh/sshd_config' || printf '%s\n' 'PubkeyAuthentication yes' >>'/etc/ssh/sshd_config'
 }
 
@@ -135,23 +139,16 @@ function apt_configure_auto_updates() {
     # Parameters
     local release_name=${1}
 
-    rm -f '/etc/apt/apt.conf.d/50unattended-upgrades'
-
-    cat <<EOF >'/etc/apt/apt.conf.d/50unattended-upgrades'
+    grep -q ".*Unattended-Upgrade::Origins-Pattern {" '/etc/apt/apt.conf.d/50unattended-upgrades' && sed -i "s,.*Unattended-Upgrade::Origins-Pattern {.*\n.*\n.*\n.*\n.*,Unattended-Upgrade::Origins-Pattern {\n\"origin=Debian\,n=${release_name}\,l=Debian\";\n\"origin=Debian\,n=${release_name}\,l=Debian-Security\";\n\"origin=Debian\,n=${release_name}-updates\";\n};," '/etc/apt/apt.conf.d/50unattended-upgrades' || cat <<EOF >>"/etc/apt/apt.conf.d/50unattended-upgrades"
 Unattended-Upgrade::Origins-Pattern {
         "origin=Debian,n=${release_name},l=Debian";
         "origin=Debian,n=${release_name},l=Debian-Security";
         "origin=Debian,n=${release_name}-updates";
 };
-
-Unattended-Upgrade::Package-Blacklist {
-
-};
-
-Unattended-Upgrade::Automatic-Reboot "true";
-Unattended-Upgrade::Automatic-Reboot-Time "04:00";
-
 EOF
+
+    grep -q ".*Unattended-Upgrade::Automatic-Reboot" '/etc/apt/apt.conf.d/50unattended-upgrades' && sed -i "s,.*Unattended-Upgrade::Automatic-Reboot.*,Unattended-Upgrade::Automatic-Reboot \"true\";," '/etc/apt/apt.conf.d/50unattended-upgrades' || printf '%s\n' 'Unattended-Upgrade::Automatic-Reboot "true";' >>'/etc/apt/apt.conf.d/50unattended-upgrades'
+    grep -q ".*Unattended-Upgrade::Automatic-Reboot-Time" '/etc/apt/apt.conf.d/50unattended-upgrades' && sed -i "s,.*Unattended-Upgrade::Automatic-Reboot-Time.*,Unattended-Upgrade::Automatic-Reboot-Time \"04:00\";," '/etc/apt/apt.conf.d/50unattended-upgrades' || printf '%s\n' 'Unattended-Upgrade::Automatic-Reboot-Time "04:00";' >>'/etc/apt/apt.conf.d/50unattended-upgrades'
 }
 
 function configure_openmediavault() {
@@ -426,10 +423,6 @@ EOF
 }
 
 function iptables_setup_base() {
-    # Parameters
-    interface=${1}
-    network_prefix=${2}
-
     # Allow established connections
     iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
     ip6tables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
@@ -459,20 +452,25 @@ function iptables_set_defaults() {
 
 function iptables_allow_ssh() {
     # Parameters
-    source=${1}
-    destination=${2}
+    local source=${1}
+    local interface=${2}
+    local ipv6_link_local='fe80::/10'
 
-    # Allow ssh from a source and destination
-    iptables -A INPUT -p tcp --dport 22 -s "${source}" -d "${destination}" -j ACCEPT
+    # Allow ssh from a source and interface
+    iptables -A INPUT -p tcp --dport 22 -s "${source}" -i "${interface}" -j ACCEPT
+    ip6tables -A INPUT -p tcp --dport 22 -s "${ipv6_link_local}" -i "${interface}" -j ACCEPT
 
     # Log new connection ips and add them to a list called SSH
     iptables -A INPUT -p tcp --dport 22 -m state --state NEW -m recent --set --name SSH
+    ip6tables -A INPUT -p tcp --dport 22 -m state --state NEW -m recent --set --name SSH
 
     # Log ssh connections from an ip to 6 connections in 60 seconds.
     iptables -A INPUT -p tcp --dport 22 -m state --state NEW -m recent --update --seconds 60 --hitcount 6 --rttl --name SSH -j LOG --log-level info --log-prefix "Limit SSH"
+    ip6tables -A INPUT -p tcp --dport 22 -m state --state NEW -m recent --update --seconds 60 --hitcount 6 --rttl --name SSH -j LOG --log-level info --log-prefix "Limit SSH"
 
     # Limit ssh connections from an ip to 6 connections in 60 seconds.
     iptables -A INPUT -p tcp --dport 22 -m state --state NEW -m recent --update --seconds 60 --hitcount 6 --rttl --name SSH -j DROP
+    ip6tables -A INPUT -p tcp --dport 22 -m state --state NEW -m recent --update --seconds 60 --hitcount 6 --rttl --name SSH -j DROP
 
     # Save rules
     iptables-save >/etc/iptables/rules.v4
@@ -481,11 +479,13 @@ function iptables_allow_ssh() {
 
 function iptables_allow_https() {
     # Parameters
-    source=${1}
-    destination=${2}
+    local source=${1}
+    local interface=${2}
+    local ipv6_link_local='fe80::/10'
 
-    # Allow https from a source and destination
-    iptables -A INPUT -p tcp --dport 443 -s "${source}" -d "${destination}" -j ACCEPT
+    # Allow https from a source and interface
+    iptables -A INPUT -p tcp --dport 443 -s "${source}" -i "${interface}" -j ACCEPT
+    ip6tables -A INPUT -p tcp --dport 443 -s "${ipv6_link_local}" -i "${interface}" -j ACCEPT
 
     # Save rules
     iptables-save >/etc/iptables/rules.v4
@@ -494,11 +494,13 @@ function iptables_allow_https() {
 
 function iptables_allow_smb() {
     # Parameters
-    source=${1}
-    destination=${2}
+    local source=${1}
+    local interface=${2}
+    local ipv6_link_local='fe80::/10'
 
     # Allow smb from a source and destination
-    iptables -A INPUT -p tcp --dport 445 -s "${source}" -d "${destination}" -j ACCEPT
+    iptables -A INPUT -p tcp --dport 445 -s "${source}" -i "${interface}" -j ACCEPT
+    ip6tables -A INPUT -p tcp --dport 445 -s "${ipv6_link_local}" -i "${interface}" -j ACCEPT
 
     # Save rules
     iptables-save >/etc/iptables/rules.v4
@@ -507,13 +509,37 @@ function iptables_allow_smb() {
 
 function iptables_allow_netbios() {
     # Parameters
-    source=${1}
-    destination=${2}
+    local source=${1}
+    local interface=${2}
+    local ipv6_link_local='fe80::/10'
 
     # Allow netbios from a source and destination
-    iptables -A INPUT -p tcp --dport 137 -s "${source}" -d "${destination}" -j ACCEPT
-    iptables -A INPUT -p tcp --dport 138 -s "${source}" -d "${destination}" -j ACCEPT
-    iptables -A INPUT -p tcp --dport 139 -s "${source}" -d "${destination}" -j ACCEPT
+    iptables -A INPUT -p tcp --dport 137:139 -s "${source}" -i "${interface}" -j ACCEPT
+    ip6tables -A INPUT -p tcp --dport 137:139 -s "${ipv6_link_local}" -i "${interface}" -j ACCEPT
+
+    # Save rules
+    iptables-save >/etc/iptables/rules.v4
+    ip6tables-save >/etc/iptables/rules.v6
+}
+
+function iptables_allow_icmp() {
+    # Parameters
+    local source=${1}
+    local interface=${2}
+    local ipv6_link_local='fe80::/10'
+
+    # Allow icmp from a source and interface
+    iptables -A INPUT -p icmp -s "${source}" -i "${interface}" -j ACCEPT
+    ip6tables -A INPUT -p icmpv6 -s "${ipv6_link_local}" -i "${interface}" -j ACCEPT
+
+    # Save rules
+    iptables-save >/etc/iptables/rules.v4
+    ip6tables-save >/etc/iptables/rules.v6
+}
+
+function iptables_allow_loopback() {
+    iptables -A INPUT -s '127.0.0.0/8' -i 'lo' -j ACCEPT
+    ip6tables -A INPUT -s '::1' -i 'lo' -j ACCEPT
 
     # Save rules
     iptables-save >/etc/iptables/rules.v4
