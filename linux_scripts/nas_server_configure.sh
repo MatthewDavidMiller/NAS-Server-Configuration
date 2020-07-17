@@ -45,3 +45,4 @@ apt_configure_auto_updates "${release_name}"
 configure_openmediavault
 create_user "${user}"
 configure_samba
+log_rotate_configure "${user_name}"
