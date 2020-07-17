@@ -12,7 +12,7 @@ wget -O 'nas_server_scripts.sh' 'https://raw.githubusercontent.com/MatthewDavidM
 source nas_server_scripts.sh
 
 # Default variables
-release_name='stretch'
+release_name='buster'
 key_name='nas_key'
 ip_address='10.1.10.4'
 network_address='10.1.10.0'
