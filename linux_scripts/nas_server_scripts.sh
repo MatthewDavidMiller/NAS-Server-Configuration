@@ -525,3 +525,71 @@ function log_rotate_configure() {
     grep -q -E "^\s*[#]*\s*compress\s*$" '/etc/logrotate.conf' && sed -i -E "s,^\s*[#]*\s*compress\s*$,compress," '/etc/logrotate.conf' || printf '%s\n' 'compress' >>'/etc/logrotate.conf'
     grep -q -E "^\s*[#]*\s*create\s*$" '/etc/logrotate.conf' && sed -i -E "s,^\s*[#]*\s*create\s*$,create," '/etc/logrotate.conf' || printf '%s\n' 'create' >>'/etc/logrotate.conf'
 }
+
+function create_swap_file() {
+    # Parameters
+    local swap_file_size=${1}
+
+    # Create swapfile
+    dd if=/dev/zero of=/swapfile bs=1M count="${swap_file_size}" status=progress
+    # Set file permissions
+    # chmod 600
+    chmod u=rw,g-rwx,o-rwx '/swapfile'
+    # Format file to swap
+    mkswap /swapfile
+    # Activate the swap file
+    swapon /swapfile
+    # Add to fstab
+    grep -q -E ".*\/swapfile" '/etc/fstab' && sed -i -E "s,.*\/swapfile.*,\/swapfile none swap defaults 0 0," '/etc/fstab' || printf '%s\n' "/swapfile none swap defaults 0 0" >>'/etc/fstab'
+}
+
+function set_timezone() {
+    ln -sf '/usr/share/zoneinfo/America/New_York' '/etc/localtime'
+}
+
+function set_language() {
+    grep -q -E ".*LANG=" '/etc/locale.conf' && sed -i -E "s,.*LANG=.*,LANG=en_US\.UTF-8," '/etc/locale.conf' || printf '%s\n' 'LANG=en_US.UTF-8' >>'/etc/locale.conf'
+}
+
+function set_hostname() {
+    # Parameters
+    local device_hostname=${1}
+
+    rm -f '/etc/hostname'
+    printf '%s\n' "${device_hostname}" >>'/etc/hostname'
+}
+
+function setup_hosts_file() {
+    # Parameters
+    local device_hostname=${1}
+
+    grep -q -E ".*127\.0\.0\.1 localhost" '/etc/hosts' && sed -i -E "s,.*127\.0\.0\.1 localhost.*,127\.0\.0\.1 localhost," '/etc/hosts' || printf '%s\n' '127.0.0.1 localhost' >>'/etc/hosts'
+    grep -q -E ".*::1 localhost" '/etc/hosts' && sed -i -E "s,.*::1.*,::1 localhost," '/etc/hosts' || printf '%s\n' '::1 localhost' >>'/etc/hosts'
+    grep -q -E ".*127\.0\.0\.1 ${device_hostname}\.localdomain ${device_hostname}" '/etc/hosts' && sed -i -E "s,.*127\.0\.0\.1 ${device_hostname}.*,127\.0\.0\.1 ${device_hostname}\.localdomain ${device_hostname}," '/etc/hosts' || printf '%s\n' "127.0.0.1 ${device_hostname}.localdomain ${device_hostname}" >>'/etc/hosts'
+}
+
+function create_user() {
+    # Parameters
+    local user_name=${1}
+
+    useradd -m "${user_name}"
+    echo "Set the password for ${user_name}"
+    passwd "${user_name}"
+    mkdir -p "/home/${user_name}"
+    chown "${user_name}" "/home/${user_name}"
+}
+
+function add_user_to_sudo() {
+    # Parameters
+    local user_name=${1}
+
+    grep -q -E ".*${user_name}" '/etc/sudoers' && sed -i -E "s,.*${user_name}.*,${user_name} ALL=\(ALL\) ALL," '/etc/sudoers' || printf '%s\n' "${user_name} ALL=(ALL) ALL" >>'/etc/sudoers'
+}
+
+function set_shell_bash() {
+    # Parameters
+    local user_name=${1}
+
+    chsh -s /bin/bash
+    chsh -s /bin/bash "${user_name}"
+}

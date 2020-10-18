@@ -22,10 +22,21 @@ dns_address='1.1.1.1'
 user='mary'
 network_prefix='10.0.0.0/8'
 ipv6_link_local_address='fe80::4'
+swap_file_size='512'
+device_hostname='NAS'
+user_name='matthew'
 
 # Call functions
+# get_username
+create_swap_file "${swap_file_size}"
+set_timezone
+set_language
+set_hostname "${device_hostname}"
+setup_hosts_file "${device_hostname}"
+create_user "${user_name}"
+add_user_to_sudo "${user_name}"
+set_shell_bash "${user_name}"
 lock_root
-get_username
 get_interface_name
 configure_network "${ip_address}" "${network_address}" "${subnet_mask}" "${gateway_address}" "${dns_address}" "${interface}" "${ipv6_link_local_address}"
 fix_apt_packages
