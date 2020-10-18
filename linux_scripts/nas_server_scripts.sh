@@ -57,7 +57,7 @@ function fix_apt_packages() {
 function install_nas_packages() {
     apt-get update
     apt-get upgrade
-    apt-get install -y wget vim git iptables iptables-persistent ntp ssh apt-transport-https openssh-server unattended-upgrades
+    apt-get install -y wget vim git iptables iptables-persistent ntp ssh apt-transport-https openssh-server unattended-upgrades sudo
 }
 
 function configure_ssh() {
