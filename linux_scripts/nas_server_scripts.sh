@@ -45,6 +45,7 @@ iface ${interface} inet static
 EOF
 
     grep -q -E ".*iface ${interface} inet6 static.*" '/etc/network/interfaces' || cat <<EOF >>'/etc/network/interfaces'
+
 iface ${interface} inet6 static
     address ${ipv6_link_local_address}
     netmask 64
